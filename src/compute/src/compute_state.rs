@@ -88,6 +88,8 @@ pub struct ComputeState {
     max_result_size: u32,
     /// Maximum number of in-flight bytes emitted by persist_sources feeding dataflows.
     pub dataflow_max_inflight_bytes: usize,
+    /// Whether to enable the active dataflow cancellation feature.
+    enable_active_dataflow_cancellation: bool,
     /// Metrics for this replica.
     pub metrics: ComputeMetrics,
 }
@@ -114,6 +116,7 @@ impl ComputeState {
             command_history: Default::default(),
             max_result_size: u32::MAX,
             dataflow_max_inflight_bytes: usize::MAX,
+            enable_active_dataflow_cancellation: false,
             metrics,
         }
     }
@@ -187,6 +190,7 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
         let ComputeParameters {
             max_result_size,
             dataflow_max_inflight_bytes,
+            enable_active_dataflow_cancellation,
             persist,
         } = params;
 
@@ -195,6 +199,9 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
         }
         if let Some(v) = dataflow_max_inflight_bytes {
             self.compute_state.dataflow_max_inflight_bytes = v;
+        }
+        if let Some(v) = enable_active_dataflow_cancellation {
+            self.compute_state.enable_active_dataflow_cancellation = v;
         }
 
         persist.apply(self.compute_state.persist_clients.cfg())
@@ -356,9 +363,12 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
             .dataflow_indexes
             .remove(&id)
             .expect("Dropped compute collection with no dataflow");
-        if let Ok(index) = Rc::try_unwrap(dataflow_index) {
-            #[allow(clippy::disallowed_methods)]
-            self.timely_worker.drop_dataflow(index);
+        if self.compute_state.enable_active_dataflow_cancellation {
+            if let Ok(index) = Rc::try_unwrap(dataflow_index) {
+                // This code is behind a feature flag and not running in production.
+                #[allow(clippy::disallowed_methods)]
+                self.timely_worker.drop_dataflow(index);
+            }
         }
 
         // Remove removing frontier tracking and logging.

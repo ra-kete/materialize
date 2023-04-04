@@ -71,6 +71,12 @@ pub struct ComputeState {
     pub reported_frontiers: BTreeMap<GlobalId, ReportedFrontier>,
     /// Collections that were recently dropped and whose removal needs to be reported.
     dropped_collections: Vec<GlobalId>,
+    /// Maps exported collections to dataflow indexes.
+    ///
+    /// Used for dropping dataflows when collections are dropped.
+    /// Dataflow indexes are wrapped in `Rc`s and can be shared between collection keys, to reflect
+    /// the possibility that a single dataflow can have multiple exports.
+    dataflow_indexes: BTreeMap<GlobalId, Rc<usize>>,
     /// The logger, from Timely's logging framework, if logs are enabled.
     pub compute_logger: Option<logging::compute::Logger>,
     /// A process-global cache of (blob_uri, consensus_uri) -> PersistClient.
@@ -102,6 +108,7 @@ impl ComputeState {
             pending_peeks: Default::default(),
             reported_frontiers: Default::default(),
             dropped_collections: Default::default(),
+            dataflow_indexes: Default::default(),
             compute_logger: None,
             persist_clients,
             command_history: Default::default(),
@@ -210,9 +217,9 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
                 .map(|(idx_id, (idx, _))| (*idx_id, idx.on_id));
             let exported_ids = index_ids.chain(sink_ids);
 
-            let dataflow_index = self.timely_worker.next_dataflow_index();
+            let dataflow_index = Rc::new(self.timely_worker.next_dataflow_index());
 
-            // Initialize frontiers for each object, and optionally log their construction.
+            // Initialize compute state for each exported object, and optionally log its construction.
             for (object_id, collection_id) in exported_ids {
                 let reported_frontier = ReportedFrontier::NotReported {
                     lower: dataflow.as_of.clone().unwrap(),
@@ -223,7 +230,21 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
                     .insert(object_id, reported_frontier)
                 {
                     error!(
-                        "existing frontier {frontier:?} for newly created dataflow id {object_id}"
+                        ?object_id,
+                        ?frontier,
+                        "existing reported frontier for newly created collection"
+                    );
+                }
+
+                if let Some(index) = self
+                    .compute_state
+                    .dataflow_indexes
+                    .insert(object_id, Rc::clone(&dataflow_index))
+                {
+                    error!(
+                        ?object_id,
+                        ?index,
+                        "existing dataflow index for newly created collection"
                     );
                 }
 
@@ -231,7 +252,7 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
                 if let Some(logger) = self.compute_state.compute_logger.as_mut() {
                     logger.log(ComputeEvent::Export {
                         id: object_id,
-                        dataflow_index,
+                        dataflow_index: *dataflow_index,
                     });
                     logger.log(ComputeEvent::Frontier {
                         id: object_id,
@@ -328,6 +349,17 @@ impl<'a, A: Allocate> ActiveComputeState<'a, A> {
         self.compute_state.flow_control_probes.remove(&id);
 
         // Work common to sinks and indexes:
+
+        // Drop the dataflow, if all its exports have been dropped.
+        let dataflow_index = self
+            .compute_state
+            .dataflow_indexes
+            .remove(&id)
+            .expect("Dropped compute collection with no dataflow");
+        if let Ok(index) = Rc::try_unwrap(dataflow_index) {
+            #[allow(clippy::disallowed_methods)]
+            self.timely_worker.drop_dataflow(index);
+        }
 
         // Remove removing frontier tracking and logging.
         let prev_frontier = self

@@ -20,13 +20,47 @@
   SELECT * FROM flip
 > CREATE INDEX divergent_index ON divergent (x)
 
+> CREATE MATERIALIZED VIEW divergent_materialized AS
+  WITH MUTUALLY RECURSIVE
+      flip(x int) AS (VALUES(1) EXCEPT ALL SELECT * FROM flip)
+  SELECT * FROM flip
+
 # Ensure the dataflow was successfully installed.
 > SELECT count(*)
   FROM mz_internal.mz_dataflows
-  WHERE name LIKE '%divergent_index%'
-1
+  WHERE name LIKE '%divergent%'
+2
 
-> DROP INDEX divergent_index 
+# Drop the installed dataflows
+
+> DROP INDEX divergent_index
+
+> DROP MATERIALIZED VIEW divergent_materialized
+
+# Force a statement timeout
+
+> CREATE TABLE divergent_insert_select (f1 INTEGER);
+
+> SET statement_timeout = '5s'
+
+! INSERT INTO divergent_insert_select
+  WITH MUTUALLY RECURSIVE flip(x int) AS (VALUES(1) EXCEPT ALL SELECT * FROM flip)
+  SELECT * FROM flip;
+contains: canceling statement due to statement timeout
+
+# Force a cursor to close
+> BEGIN
+
+> DECLARE c CURSOR FOR SUBSCRIBE (
+    WITH MUTUALLY RECURSIVE flip(x int) AS (VALUES(1) EXCEPT ALL SELECT * FROM flip)
+    SELECT * FROM flip
+  )
+
+> FETCH ALL c WITH (timeout = '2s');
+
+> COMMIT
+
+# Confirm that all dataflows are now cancelled
 
 > SELECT count(*) FROM mz_internal.mz_active_peeks_per_worker
 0

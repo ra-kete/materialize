@@ -7,12 +7,12 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0.
 
-# This test checks whether active dataflow cancellation works. It operates by installing a
-# divergent WMR dataflow and then `DROP`ing it. Only if active cancellation works will the dataflow
-# actually be dropped in timely, otherwise it will continue running in the background forever.
+# This test checks whether divergent WMR dataflows are correctly dropped after
+# they have been cancelled by the user.
 #
-# We check whether the dataflow was dropped by inspecting the introspection sources. This also
-# serves to verify that logging is correctly cleaned up under active dataflow cancellation.
+# We check whether the dataflow was dropped by inspecting the introspection
+# sources. This also serves to verify that logging is correctly cleaned up under
+# active dataflow cancellation.
 
 > CREATE VIEW divergent AS
   WITH MUTUALLY RECURSIVE

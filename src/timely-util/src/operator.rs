@@ -14,6 +14,8 @@ use std::rc::Weak;
 
 use differential_dataflow::difference::{Multiply, Semigroup};
 use differential_dataflow::lattice::Lattice;
+use differential_dataflow::operators::arrange::Arranged;
+use differential_dataflow::trace::TraceReader;
 use differential_dataflow::{AsCollection, Collection};
 use timely::dataflow::channels::pact::{ParallelizationContract, Pipeline};
 use timely::dataflow::channels::pushers::Tee;
@@ -216,6 +218,15 @@ where
     /// Wraps the collection with a passthrough operator that will be shut down when the provided
     /// token cannot be upgraded anymore.
     fn fused(&self, token: Weak<()>) -> Collection<G, D1, R>;
+}
+
+pub trait ArrangedExt<G, Tr>
+where
+    G: Scope,
+    G::Timestamp: Lattice + Ord,
+    Tr: TraceReader + Clone,
+{
+    fn fused(&self, token: Weak<()>) -> Arranged<G, Tr>;
 }
 
 impl<G, D1> StreamExt<G, D1> for Stream<G, D1>
@@ -512,6 +523,20 @@ where
 
     fn fused(&self, token: Weak<()>) -> Collection<G, D1, R> {
         self.inner.fused(token).as_collection()
+    }
+}
+
+impl<G, Tr> ArrangedExt<G, Tr> for Arranged<G, Tr>
+where
+    G: Scope,
+    G::Timestamp: Lattice + Ord,
+    Tr: TraceReader + Clone,
+{
+    fn fused(&self, token: Weak<()>) -> Arranged<G, Tr> {
+        Arranged {
+            stream: self.stream.fused(token),
+            trace: self.trace.clone(),
+        }
     }
 }
 

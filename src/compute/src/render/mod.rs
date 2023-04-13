@@ -302,10 +302,10 @@ pub fn build_compute_dataflow<A: Allocate>(
                         // This token is wired up on every feedback edge and will stop iteration
                         // when dropped.
                         let object_token = Rc::new(());
-                        let weak_token = Rc::downgrade(&object_token);
-
-                        let bundle = context.render_recursive_plan(weak_token, 0, object.plan);
+                        context.shutdown_token = Rc::downgrade(&object_token);
                         tokens.insert(object.id, object_token);
+
+                        let bundle = context.render_recursive_plan(0, object.plan);
                         context.insert_id(Id::Global(object.id), bundle);
                     }
 
@@ -355,6 +355,10 @@ pub fn build_compute_dataflow<A: Allocate>(
 
                 // Build declared objects.
                 for object in dataflow.objects_to_build {
+                    let object_token = Rc::new(());
+                    context.shutdown_token = Rc::downgrade(&object_token);
+                    tokens.insert(object.id, object_token);
+
                     context.build_object(object);
                 }
 
@@ -617,12 +621,7 @@ where
     ///
     /// The method requires that all variables conclude with a physical representation that
     /// contains a collection (i.e. a non-arrangement), and it will panic otherwise.
-    pub fn render_recursive_plan(
-        &mut self,
-        token: Weak<()>,
-        level: usize,
-        plan: Plan,
-    ) -> CollectionBundle<G, Row> {
+    pub fn render_recursive_plan(&mut self, level: usize, plan: Plan) -> CollectionBundle<G, Row> {
         if let Plan::LetRec { ids, values, body } = plan {
             // It is important that we only use the `Variable` until the object is bound.
             // At that point, all subsequent uses should have access to the object itself.
@@ -646,7 +645,7 @@ where
             }
             // Now render each of the bindings.
             for (id, value) in ids.iter().zip(values.into_iter()) {
-                let bundle = self.render_recursive_plan(Weak::clone(&token), level + 1, value);
+                let bundle = self.render_recursive_plan(level + 1, value);
                 // We need to ensure that the raw collection exists, but do not have enough information
                 // here to cause that to happen.
                 let (oks, err) = bundle.collection.clone().unwrap();
@@ -656,7 +655,7 @@ where
                 use crate::typedefs::RowKeySpine;
                 oks_v.set(
                     &oks.consolidate_named::<RowKeySpine<_, _, _>>("LetRecConsolidation")
-                        .fused(Weak::clone(&token)),
+                        .fused(Weak::clone(&self.shutdown_token)),
                 );
                 // Set err variable to the distinct elements of `err`.
                 // Distinctness is important, as we otherwise might add the same error each iteration,
@@ -670,7 +669,7 @@ where
                             move |_k, _s, t| t.push(((), 1)),
                         )
                         .as_collection(|k, _| k.clone())
-                        .fused(Weak::clone(&token)),
+                        .fused(Weak::clone(&self.shutdown_token)),
                 );
             }
             // Now extract each of the bindings into the outer scope.
@@ -686,7 +685,7 @@ where
                 );
             }
 
-            self.render_recursive_plan(token, level, *body)
+            self.render_recursive_plan(level, *body)
         } else {
             self.render_plan(plan)
         }

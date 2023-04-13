@@ -139,8 +139,8 @@ where
                     let update_stream = match val {
                         Ok(local) => {
                             let arranged = local
-                                .enter_region(region)
-                                .fused(Weak::clone(&self.shutdown_token));
+                                .enter_region(region);
+                                // .fused(Weak::clone(&self.shutdown_token));
                             let (update_stream, err_stream) = build_update_stream(
                                 arranged,
                                 as_of,
@@ -152,8 +152,8 @@ where
                         }
                         Err(trace) => {
                             let arranged = trace
-                                .enter_region(region)
-                                .fused(Weak::clone(&self.shutdown_token));
+                                .enter_region(region);
+                                // .fused(Weak::clone(&self.shutdown_token));
                             let (update_stream, err_stream) = build_update_stream(
                                 arranged,
                                 as_of,
@@ -203,6 +203,7 @@ where
                                             stream_thinning,
                                             |t1, t2| t1.le(t2),
                                             closure,
+                                            Weak::clone(&self.shutdown_token),
                                         )
                                     } else {
                                         build_halfjoin(
@@ -212,6 +213,7 @@ where
                                             stream_thinning,
                                             |t1, t2| t1.lt(t2),
                                             closure,
+                                            Weak::clone(&self.shutdown_token),
                                         )
                                     }
                                 }
@@ -224,6 +226,7 @@ where
                                             stream_thinning,
                                             |t1, t2| t1.le(t2),
                                             closure,
+                                            Weak::clone(&self.shutdown_token),
                                         )
                                     } else {
                                         build_halfjoin(
@@ -233,6 +236,7 @@ where
                                             stream_thinning,
                                             |t1, t2| t1.lt(t2),
                                             closure,
+                                            Weak::clone(&self.shutdown_token),
                                         )
                                     }
                                 }
@@ -319,6 +323,7 @@ fn build_halfjoin<G, Tr, CF>(
     prev_thinning: Vec<usize>,
     comparison: CF,
     closure: JoinClosure,
+    token: Weak<()>,
 ) -> (
     Collection<G, (Row, G::Timestamp), Diff>,
     Collection<G, DataflowError, Diff>,
@@ -369,6 +374,8 @@ where
             |_timer, count| count > 1_000_000,
             // TODO(mcsherry): consider `RefOrMut` in `half_join` interface to allow re-use.
             move |key, stream_row, lookup_row, initial, time, diff1, diff2| {
+                token.upgrade()?;
+
                 let temp_storage = RowArena::new();
                 let mut datums_local = datums.borrow_with_many(&[key, stream_row, lookup_row]);
                 let row = closure.apply(&mut datums_local, &temp_storage, &mut row_builder);
@@ -401,6 +408,8 @@ where
             |_timer, count| count > 1_000_000,
             // TODO(mcsherry): consider `RefOrMut` in `half_join` interface to allow re-use.
             move |key, stream_row, lookup_row, initial, time, diff1, diff2| {
+                token.upgrade()?;
+
                 let temp_storage = RowArena::new();
                 let mut datums_local = datums.borrow_with_many(&[key, stream_row, lookup_row]);
                 let row = closure

@@ -11,12 +11,15 @@
 //!
 //! Consult [LinearJoinPlan] documentation for details.
 
+use std::rc::Weak;
+
 use differential_dataflow::lattice::Lattice;
 use differential_dataflow::operators::arrange::arrangement::Arrange;
 use differential_dataflow::operators::arrange::arrangement::Arranged;
 use differential_dataflow::operators::join::JoinCore;
 use differential_dataflow::trace::TraceReader;
 use differential_dataflow::Collection;
+use mz_timely_util::operator::ArrangedExt;
 use timely::dataflow::Scope;
 use timely::progress::{timestamp::Refines, Timestamp};
 
@@ -123,6 +126,7 @@ where
                     inputs[stage_plan.lookup_relation].enter_region(inner),
                     stage_plan,
                     &mut errors,
+                    Weak::clone(&self.shutdown_token),
                 );
                 // Update joined results and capture any errors.
                 joined = JoinedFlavor::Collection(stream);
@@ -179,6 +183,7 @@ fn differential_join<G, T>(
         lookup_relation: _,
     }: LinearStagePlan,
     errors: &mut Vec<Collection<G, DataflowError, Diff>>,
+    token: Weak<()>,
 ) -> Collection<G, Row, Diff>
 where
     G: Scope,
@@ -223,12 +228,16 @@ where
         }
         JoinedFlavor::Local(local) => match arrangement {
             ArrangementFlavor::Local(oks, errs1) => {
+                let local = local.fused(Weak::clone(&token));
+                let oks = oks.fused(Weak::clone(&token));
                 let (oks, errs2) = differential_join_inner(local, oks, closure);
                 errors.push(errs1.as_collection(|k, _v| k.clone()));
                 errors.extend(errs2);
                 oks
             }
             ArrangementFlavor::Trace(_gid, oks, errs1) => {
+                let local = local.fused(Weak::clone(&token));
+                let oks = oks.fused(Weak::clone(&token));
                 let (oks, errs2) = differential_join_inner(local, oks, closure);
                 errors.push(errs1.as_collection(|k, _v| k.clone()));
                 errors.extend(errs2);
@@ -237,12 +246,16 @@ where
         },
         JoinedFlavor::Trace(trace) => match arrangement {
             ArrangementFlavor::Local(oks, errs1) => {
+                let trace = trace.fused(Weak::clone(&token));
+                let oks = oks.fused(Weak::clone(&token));
                 let (oks, errs2) = differential_join_inner(trace, oks, closure);
                 errors.push(errs1.as_collection(|k, _v| k.clone()));
                 errors.extend(errs2);
                 oks
             }
             ArrangementFlavor::Trace(_gid, oks, errs1) => {
+                let trace = trace.fused(Weak::clone(&token));
+                let oks = oks.fused(Weak::clone(&token));
                 let (oks, errs2) = differential_join_inner(trace, oks, closure);
                 errors.push(errs1.as_collection(|k, _v| k.clone()));
                 errors.extend(errs2);

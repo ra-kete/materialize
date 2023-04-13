@@ -13,6 +13,7 @@
 
 #![allow(clippy::op_ref)]
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Weak;
 
 use timely::dataflow::Scope;
 use timely::progress::Antichain;
@@ -22,7 +23,7 @@ use mz_compute_client::plan::join::JoinClosure;
 use mz_expr::MirScalarExpr;
 use mz_repr::{DatumVec, Diff, Row, RowArena};
 use mz_storage_client::types::errors::DataflowError;
-use mz_timely_util::operator::CollectionExt;
+use mz_timely_util::operator::{ArrangedExt, CollectionExt};
 
 use crate::render::context::{ArrangementFlavor, CollectionBundle, Context};
 
@@ -137,7 +138,9 @@ where
                     let as_of = self.as_of_frontier.clone();
                     let update_stream = match val {
                         Ok(local) => {
-                            let arranged = local.enter_region(region);
+                            let arranged = local
+                                .enter_region(region)
+                                .fused(Weak::clone(&self.shutdown_token));
                             let (update_stream, err_stream) = build_update_stream(
                                 arranged,
                                 as_of,
@@ -148,7 +151,9 @@ where
                             update_stream
                         }
                         Err(trace) => {
-                            let arranged = trace.enter_region(region);
+                            let arranged = trace
+                                .enter_region(region)
+                                .fused(Weak::clone(&self.shutdown_token));
                             let (update_stream, err_stream) = build_update_stream(
                                 arranged,
                                 as_of,

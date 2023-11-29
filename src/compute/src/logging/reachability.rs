@@ -31,7 +31,7 @@ use crate::typedefs::{KeysValsHandle, RowSpine};
 
 pub(super) type ReachabilityEvent = (
     Vec<usize>,
-    Vec<(usize, usize, bool, Option<Timestamp>, Diff)>,
+    Vec<(usize, usize, Option<Timestamp>, Diff)>,
 );
 
 /// Constructs the logging dataflow for reachability logs.
@@ -94,8 +94,8 @@ pub(super) fn construct<A: Allocate>(
                         let time_ms = (((time.as_millis() / interval_ms) + 1) * interval_ms)
                             .try_into()
                             .expect("must fit");
-                        for (source, port, update_type, ts, diff) in massaged {
-                            let datum = (update_type, addr.clone(), source, port, ts);
+                        for (node, port, ts, diff) in massaged {
+                            let datum = (addr.clone(), node, port, ts);
                             updates_session.give(&cap, ((datum, ()), time_ms, diff));
                         }
                     }
@@ -120,21 +120,19 @@ pub(super) fn construct<A: Allocate>(
                 );
 
                 let updates =
-                    updates.as_collection(move |(update_type, addr, source, port, ts), _| {
+                    updates.as_collection(move |(addr, node, port, ts), _| {
                         let row_arena = RowArena::default();
-                        let update_type = if *update_type { "source" } else { "target" };
                         let binding = SharedRow::get();
                         let mut row_builder = binding.borrow_mut();
                         row_builder.packer().push_list(
                             addr.iter()
-                                .chain_one(source)
+                                .chain_one(node)
                                 .map(|id| Datum::UInt64(u64::cast_from(*id))),
                         );
                         let datums = &[
                             row_arena.push_unary_row(row_builder.clone()),
                             Datum::UInt64(u64::cast_from(*port)),
                             Datum::UInt64(u64::cast_from(worker_index)),
-                            Datum::String(update_type),
                             Datum::from(ts.clone()),
                         ];
                         row_builder.packer().extend(key.iter().map(|k| datums[*k]));

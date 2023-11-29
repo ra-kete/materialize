@@ -3911,33 +3911,24 @@ WHERE worker_id = 0",
 };
 
 pub const MZ_DATAFLOW_OPERATOR_REACHABILITY_PER_WORKER: BuiltinView = BuiltinView {
-    name: "mz_dataflow_operator_reachability_per_worker",
+    name: "mz_dataflow_operator_frontiers_per_worker",
     schema: MZ_INTERNAL_SCHEMA,
-    sql: "CREATE VIEW mz_internal.mz_dataflow_operator_reachability_per_worker AS SELECT
-    address,
-    port,
-    worker_id,
-    update_type,
-    time,
-    pg_catalog.count(*) as count
-FROM
-    mz_internal.mz_dataflow_operator_reachability_raw
-GROUP BY address, port, worker_id, update_type, time",
+    sql: "CREATE VIEW mz_internal.mz_dataflow_operator_frontiers_per_worker AS
+SELECT *
+FROM mz_internal.mz_dataflow_operator_reachability_raw",
     sensitivity: DataSensitivity::Public,
 };
 
 pub const MZ_DATAFLOW_OPERATOR_REACHABILITY: BuiltinView = BuiltinView {
-    name: "mz_dataflow_operator_reachability",
+    name: "mz_dataflow_operator_frontiers",
     schema: MZ_INTERNAL_SCHEMA,
-    sql: "CREATE VIEW mz_internal.mz_dataflow_operator_reachability AS
+    sql: "CREATE VIEW mz_internal.mz_dataflow_operator_frontiers AS
 SELECT
     address,
     port,
-    update_type,
-    time,
-    pg_catalog.sum(count) as count
-FROM mz_internal.mz_dataflow_operator_reachability_per_worker
-GROUP BY address, port, update_type, time",
+    pg_catalog.min(time) as time
+FROM mz_internal.mz_dataflow_operator_frontiers_per_worker
+GROUP BY address, port",
     sensitivity: DataSensitivity::Public,
 };
 

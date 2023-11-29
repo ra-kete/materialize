@@ -179,40 +179,28 @@ impl<A: Allocate + 'static> LoggingContext<'_, A> {
                 let mut converted_updates = Vec::new();
                 for event in data.drain(..) {
                     match event.2 {
-                        TrackerEvent::SourceUpdate(update) => {
-                            let massaged: Vec<_> = update
+                        TrackerEvent::FrontierUpdates(updates) => {
+                            let massaged: Vec<_> = updates
                                 .updates
                                 .iter()
-                                .map(|(node, port, time, diff)| {
-                                    let ts = time.as_any().downcast_ref::<Timestamp>().copied();
-                                    let is_source = true;
-                                    (*node, *port, is_source, ts, *diff)
+                                .filter_map(|(location, time, diff)| {
+                                    use timely::progress::Port;
+                                    if let Port::Source(port) = location.port {
+                                        let ts = time.as_any().downcast_ref::<Timestamp>().copied();
+                                        Some((location.node, port, ts, *diff))
+                                    } else {
+                                        None
+                                    }
                                 })
                                 .collect();
 
                             converted_updates.push((
                                 event.0,
                                 event.1,
-                                (update.tracker_id, massaged),
+                                (updates.tracker_id, massaged),
                             ));
                         }
-                        TrackerEvent::TargetUpdate(update) => {
-                            let massaged: Vec<_> = update
-                                .updates
-                                .iter()
-                                .map(|(node, port, time, diff)| {
-                                    let ts = time.as_any().downcast_ref::<Timestamp>().copied();
-                                    let is_source = false;
-                                    (*node, *port, is_source, ts, *diff)
-                                })
-                                .collect();
-
-                            converted_updates.push((
-                                event.0,
-                                event.1,
-                                (update.tracker_id, massaged),
-                            ));
-                        }
+                        TrackerEvent::PointstampUpdates(_) => {}
                     }
                 }
                 logger.publish_batch(time, &mut converted_updates);

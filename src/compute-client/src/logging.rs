@@ -413,7 +413,6 @@ impl LogVariant {
                 )
                 .with_column("port", ScalarType::UInt64.nullable(false))
                 .with_column("worker_id", ScalarType::UInt64.nullable(false))
-                .with_column("update_type", ScalarType::String.nullable(false))
                 .with_column("time", ScalarType::MzTimestamp.nullable(true)),
 
             LogVariant::Differential(DifferentialLog::ArrangementBatches)

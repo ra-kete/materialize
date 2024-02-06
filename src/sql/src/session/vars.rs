@@ -2169,7 +2169,7 @@ feature_flags!(
     {
         name: enable_compute_aggressive_readhold_downgrades,
         desc: "let the compute controller aggressively downgrade read holds for sink dataflows",
-        default: true,
+        default: false,
         internal: true,
         enable_for_item_parsing: false,
     },

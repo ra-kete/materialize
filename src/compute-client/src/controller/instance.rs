@@ -2056,6 +2056,32 @@ where
         }
     }
 
+    /// Return the write frontiers of the dependencies of the given collection.
+    fn dependency_write_frontiers<'b>(
+        &'b self,
+        collection: &'b CollectionState<T>,
+    ) -> impl Iterator<Item = Antichain<T>> + 'b {
+        let compute_frontiers = collection.compute_dependencies.iter().flat_map(|dep_id| {
+            let collection = self.compute.collections.get(dep_id);
+            collection.map(|c| c.write_frontier.clone())
+        });
+
+        let storage_ids = collection
+            .storage_dependencies
+            .iter()
+            .filter(|id| self.storage_controller.check_exists(**id).is_ok())
+            .copied()
+            .collect::<Vec<_>>();
+        let storage_frontiers = self
+            .storage_controller
+            .collections_frontiers(storage_ids)
+            .expect("checked above")
+            .into_iter()
+            .map(|(_id, _since, upper)| upper);
+
+        compute_frontiers.chain(storage_frontiers)
+    }
+
     /// Downgrade the warmup capabilities of collections as much as possible.
     ///
     /// The only requirement we have for a collection's warmup capability is that it is for a time
@@ -2082,28 +2108,10 @@ where
                 continue;
             }
 
-            let compute_frontiers = collection.compute_dependencies.iter().flat_map(|dep_id| {
-                let collection = self.compute.collections.get(dep_id);
-                collection.map(|c| c.write_frontier.clone())
-            });
-
-            let existing_storage_dependencies = collection
-                .storage_dependencies
-                .iter()
-                .filter(|id| self.storage_controller.check_exists(**id).is_ok())
-                .copied()
-                .collect::<Vec<_>>();
-            let storage_frontiers = self
-                .storage_controller
-                .collections_frontiers(existing_storage_dependencies)
-                .expect("missing storage collections")
-                .into_iter()
-                .map(|(_id, _since, upper)| upper);
-
             let mut new_capability = Antichain::new();
-            for frontier in compute_frontiers.chain(storage_frontiers) {
-                for time in frontier.iter() {
-                    new_capability.insert(time.step_back().unwrap_or(time.clone()));
+            for frontier in self.dependency_write_frontiers(collection) {
+                for time in frontier {
+                    new_capability.insert(time.step_back().unwrap_or(time));
                 }
             }
 

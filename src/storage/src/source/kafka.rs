@@ -188,6 +188,8 @@ impl SourceRender for KafkaSourceConnection {
         Vec<PressOnDropButton>,
     ) {
         let mut builder = AsyncOperatorBuilder::new(config.name.clone(), scope.clone());
+        let worker = config.worker_id;
+        let render_start = std::time::Instant::now();
 
         let (data_output, stream) = builder.new_output::<AccountedStackBuilder<_>>();
         let (_progress_output, progress_stream) =
@@ -332,6 +334,7 @@ impl SourceRender for KafkaSourceConnection {
                             notificator: Arc::clone(&notificator),
                             stats_tx,
                             inner: MzClientContext::default(),
+                            worker,
                         },
                         &btreemap! {
                             // Disable Kafka auto commit. We manually commit offsets
@@ -408,6 +411,7 @@ impl SourceRender for KafkaSourceConnection {
                                 },
                             );
                         }
+                        tracing::error!("[{worker}] consumer creation failed!");
                         // IMPORTANT: wedge forever until the `SuspendAndRestart` is processed.
                         // Returning would incorrectly present to the remap operator as progress to the
                         // empty frontier which would be incorrectly recorded to the remap shard.
@@ -757,6 +761,10 @@ impl SourceRender for KafkaSourceConnection {
                     // not atomic, so we expect to see at least some messages to show up when polling
                     // the consumer directly.
                     while let Some(result) = reader.consumer.poll(Duration::from_secs(0)) {
+                        tracing::error!(
+                             "surprisingly got message from main consumer queue: {:?}",
+                             result.as_ref().map(|m| m.offset())
+                        );
                         match result {
                             Err(e) => {
                                 let error = format!(
@@ -894,6 +902,7 @@ impl SourceRender for KafkaSourceConnection {
                             }
                         }
                         if !partition_exhausted {
+                            tracing::error!("[{worker}] activate: (!partition_exhausted)");
                             notificator.notify_one();
                         }
                     }
@@ -1036,6 +1045,8 @@ impl SourceRender for KafkaSourceConnection {
             })
         });
 
+        tracing::error!("[{worker}] render: {:?}", render_start.elapsed());
+
         (
             stream.as_collection(),
             Some(progress_stream),
@@ -1152,7 +1163,7 @@ impl KafkaSourceReader {
                 .expect("partition known to be valid");
             pc.partition_queue.set_nonempty_callback({
                 let context = Arc::clone(&context);
-                move || context.inner().activate()
+                move || context.inner().activate("nonempty 1")
             });
         }
 
@@ -1160,7 +1171,7 @@ impl KafkaSourceReader {
             .consumer
             .split_partition_queue(&self.topic_name, partition_id)
             .expect("partition known to be valid");
-        partition_queue.set_nonempty_callback(move || context.inner().activate());
+        partition_queue.set_nonempty_callback(move || context.inner().activate("nonempty 2"));
         self.partition_consumers
             .push(PartitionConsumer::new(partition_id, partition_queue));
         assert_eq!(
@@ -1416,6 +1427,7 @@ struct GlueConsumerContext {
     notificator: Arc<Notify>,
     stats_tx: crossbeam_channel::Sender<Jsonb>,
     inner: MzClientContext,
+    worker: usize,
 }
 
 impl ClientContext for GlueConsumerContext {
@@ -1425,7 +1437,7 @@ impl ClientContext for GlueConsumerContext {
                 self.stats_tx
                     .send(statistics)
                     .expect("timely operator hung up while Kafka source active");
-                self.activate();
+                self.activate("stats");
             }
             Err(e) => error!("failed decoding librdkafka statistics JSON: {}", e),
         };
@@ -1442,8 +1454,9 @@ impl ClientContext for GlueConsumerContext {
 }
 
 impl GlueConsumerContext {
-    fn activate(&self) {
-        self.notificator.notify_waiters();
+    fn activate(&self, reason: &str) {
+        tracing::error!("[{}] activate ({reason})", self.worker);
+        self.notificator.notify_one();
     }
 }
 

@@ -79,7 +79,7 @@ prost = { version = "0.13.2", features = ["no-recursion-limit"] }
 qcell = "0.5"
 rand = "0.8.5"
 rand_chacha = "0.3"
-rdkafka = { version = "0.29.0", features = [
+rdkafka = { path = "../rust-rdkafka", features = [
     "cmake-build",
     "ssl-vendored",
     "libz-static",

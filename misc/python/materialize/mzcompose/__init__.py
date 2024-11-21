@@ -63,6 +63,7 @@ def get_default_system_parameters(
         version = MzVersion.parse_cargo()
 
     return {
+        "kafka_poll_max_wait": "1ms",
         # -----
         # Unsafe functions
         "enable_unsafe_functions": "true",

@@ -107,6 +107,8 @@ members = [
     "test/test-util",
     "src/regexp",
     "misc/bazel/cargo-gazelle",
+    "src/rust-rdkafka",
+    "src/rust-rdkafka/rdkafka-sys",
 ]
 
 # We make all members of the workspace default members, *except* for a few
@@ -220,6 +222,8 @@ default-members = [
     "src/workspace-hack",
     "test/metabase/smoketest",
     "test/test-util",
+    "src/rust-rdkafka",
+    "src/rust-rdkafka/rdkafka-sys",
 ]
 
 exclude = [
@@ -297,10 +301,6 @@ launchdarkly-server-sdk = { git = "https://github.com/MaterializeInc/rust-server
 # Waiting on https://github.com/AltSysrq/proptest/pull/264.
 proptest = { git = "https://github.com/MaterializeInc/proptest.git" }
 proptest-derive = { git = "https://github.com/MaterializeInc/proptest.git" }
-
-# Waiting on https://github.com/edenhill/librdkafka/pull/4051.
-rdkafka = { git = "https://github.com/MaterializeInc/rust-rdkafka.git" }
-rdkafka-sys = { git = "https://github.com/MaterializeInc/rust-rdkafka.git" }
 
 # Waiting on https://github.com/openssh-rust/openssh/pull/120 to make it into
 # a release.

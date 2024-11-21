@@ -292,6 +292,8 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
         const char *conf_err;
         const char *used_conf_str;
 
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s topic_new0\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rk->rk_client_id));
+
         /* Verify configuration.
          * Maximum topic name size + headers must never exceed message.max.bytes
          * which is min-capped to 1000.
@@ -603,7 +605,7 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
                                   int32_t broker_id,
                                   rd_kafka_broker_t *rkb,
                                   const char *reason) {
-
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s toppar_broker_update, reason=%s\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_rk->rk_client_id), reason);
         rktp->rktp_broker_id = broker_id;
 
         if (!rkb) {
@@ -1460,6 +1462,8 @@ int rd_kafka_topic_metadata_update2(
     const rd_kafka_metadata_topic_internal_t *mdit) {
         rd_kafka_topic_t *rkt;
         int r;
+
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s topic_metadata_update2\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
 
         rd_kafka_wrlock(rkb->rkb_rk);
 

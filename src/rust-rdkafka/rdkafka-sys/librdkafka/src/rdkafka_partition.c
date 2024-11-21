@@ -1150,6 +1150,8 @@ void rd_kafka_toppar_broker_delegate(rd_kafka_toppar_t *rktp,
         rd_kafka_t *rk        = rktp->rktp_rkt->rkt_rk;
         int internal_fallback = 0;
 
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s toppar_broker_delegate\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_rk->rk_client_id));
+
         rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BRKDELGT",
                      "%s [%" PRId32
                      "]: delegate to broker %s "

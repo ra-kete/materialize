@@ -3181,6 +3181,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
+	fprintf(stderr, "%.6f ERROR [rdk] %.*s op_serve, type=%d\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), rko->rko_type);
+
         switch (rko->rko_type) {
         case RD_KAFKA_OP_NODE_UPDATE: {
                 enum { _UPD_NAME = 0x1, _UPD_ID = 0x2 } updated = 0;
@@ -3452,6 +3454,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
                 if (rktp->rktp_next_broker) {
                         /* There is a next broker we need to migrate to. */
+			fprintf(stderr, "%.6f ERROR [rdk] %.*s broker partion leave?\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                         rko->rko_type = RD_KAFKA_OP_PARTITION_JOIN;
                         rd_kafka_q_enq(rktp->rktp_next_broker->rkb_ops, rko);
                         rko = NULL;
@@ -3638,14 +3641,18 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
                 if (abs_timeout > 0 && rd_kafka_q_len(rkb->rkb_ops) > 0)
                         abs_timeout = RD_POLL_NOWAIT;
 
+		fprintf(stderr, "%.6f ERROR [rdk] %.*s transport_io_serve, timeout=%d\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), rd_timeout_remains(abs_timeout));
                 if (rd_kafka_transport_io_serve(
                         rkb->rkb_transport, rkb->rkb_ops,
-                        rd_timeout_remains(abs_timeout)))
+                        rd_timeout_remains(abs_timeout))) {
+			fprintf(stderr, "%.6f ERROR [rdk] %.*s received IOs\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                         abs_timeout = RD_POLL_NOWAIT;
+		}
         }
 
 
         /* Serve broker ops */
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s ops_serve\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
         wakeup =
             rd_kafka_broker_ops_serve(rkb, rd_timeout_remains_us(abs_timeout));
 
@@ -3664,8 +3671,10 @@ rd_kafka_broker_ops_io_serve(rd_kafka_broker_t *rkb, rd_ts_t abs_timeout) {
 
         /* Scan queues for timeouts. */
         now = rd_clock();
-        if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0)
+        if (rd_interval(&rkb->rkb_timeout_scan_intvl, 1000000, now) > 0) {
+		//fprintf(stderr, "%.6f ERROR [rdk] %.*s timeout_scan\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                 rd_kafka_broker_timeout_scan(rkb, now);
+	}
 
         return wakeup;
 }
@@ -3683,6 +3692,7 @@ static rd_ts_t rd_kafka_broker_consumer_toppars_serve(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *rktp_tmp;
         rd_ts_t min_backoff = RD_TS_MAX;
 
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s toppars_serve, cnt=%d\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), rkb->rkb_toppar_cnt);
         TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_toppars, rktp_rkblink, rktp_tmp) {
                 rd_ts_t backoff;
 
@@ -4322,12 +4332,15 @@ static void rd_kafka_broker_consumer_serve(rd_kafka_broker_t *rkb,
                 if (!rkb->rkb_fetching &&
                     rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
                         if (min_backoff < now) {
+				fprintf(stderr, "%.6f ERROR [rdk] %.*s fetch toppars\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                                 rd_kafka_broker_fetch_toppars(rkb, now);
                                 min_backoff = abs_timeout;
-                        } else if (min_backoff < RD_TS_MAX)
+                        } else if (min_backoff < RD_TS_MAX) {
+				fprintf(stderr, "%.6f ERROR [rdk] %.*s not fetching, min_backoff=%d\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), min_backoff - now);
                                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                                            "Fetch backoff for %" PRId64 "ms",
                                            (min_backoff - now) / 1000);
+			}
                 } else {
                         /* Nothing needs to be done, next wakeup
                          * is from ops, state change, IO, or this timeout */
@@ -4335,17 +4348,25 @@ static void rd_kafka_broker_consumer_serve(rd_kafka_broker_t *rkb,
                 }
 
                 /* Check and move retry buffers */
-                if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
+                if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0)) {
+			fprintf(stderr, "%.6f ERROR [rdk] %.*s move retry buffers\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                         rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
+		}
 
                 if (min_backoff > abs_timeout)
                         min_backoff = abs_timeout;
 
-                if (rd_kafka_broker_ops_io_serve(rkb, min_backoff))
+		//fprintf(stderr, "%.6f ERROR [rdk] %.*s ops_io_serve\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
+                if (rd_kafka_broker_ops_io_serve(rkb, min_backoff)) {
+			// fprintf(stderr, "%.6f ERROR [rdk] %.*s wakeup\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
                         return; /* Wakeup */
+		}
 
                 rd_kafka_broker_lock(rkb);
         }
+	if (rkb->rkb_state != initial_state) {
+		fprintf(stderr, "%.6f ERROR [rdk] %.*s state change %d -> %d\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), initial_state, rkb->rkb_state);
+	}
 
         rd_kafka_broker_unlock(rkb);
 }

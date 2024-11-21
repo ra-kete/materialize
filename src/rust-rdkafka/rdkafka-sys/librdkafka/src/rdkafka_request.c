@@ -2934,6 +2934,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              rd_bool_t cgrp_update,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko) {
+	fprintf(stderr, "%.6f ERROR [rdk] %.*s MetadataRequest, reason=%s\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), reason);
         return rd_kafka_MetadataRequest0(
             rkb, topics, topic_ids, reason, allow_auto_create_topics,
             rd_false /*don't include cluster authorized operations*/,
@@ -3002,6 +3003,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_kafka_replyq_t replyq,
     rd_bool_t force,
     void *opaque) {
+	fprintf(stderr, "%.6f ERROR [rdk] %.*s MetadataRequest_resp_cb, reason=%s\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id), reason);
         return rd_kafka_MetadataRequest0(
             rkb, topics, topics_ids, reason, allow_auto_create_topics,
             include_cluster_authorized_operations,

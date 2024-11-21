@@ -357,6 +357,8 @@ static void rd_kafka_parse_Metadata_update_topic(
     const rd_kafka_metadata_topic_t *mdt,
     const rd_kafka_metadata_topic_internal_t *mdit) {
 
+	fprintf(stderr, "%.6f ERROR [rdk] %.*s parse_Metadata_update_topic\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rkb->rkb_rk->rk_client_id));
+
         rd_rkb_dbg(rkb, METADATA, "METADATA",
                    /* The indent below is intentional */
                    "  Topic %s with %i partitions%s%s", mdt->topic,
@@ -1990,6 +1992,7 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
         rd_bool_t cache_updated       = rd_false;
         rd_kafka_secproto_t rkb_proto = rk->rk_conf.security_protocol;
 
+	//fprintf(stderr, "%.6f ERROR [rdk] %.*s metadata_update_op\n", rd_uclock() / 1000000.0, RD_KAFKAP_STR_PR(rk->rk_client_id));
 
         for (i = 0; i < md->broker_cnt; i++) {
                 rd_kafka_broker_update(rk, rkb_proto, &md->brokers[i], NULL);

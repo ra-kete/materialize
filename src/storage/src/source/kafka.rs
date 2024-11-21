@@ -361,7 +361,7 @@ impl SourceRender for KafkaSourceConnection {
                             "group.id" => group_id.clone(),
                             // Allow Kafka monitoring tools to identify this
                             // consumer.
-                            "client.id" => client_id.clone(),
+                            "client.id" => format!("{client_id} [{worker}]"),
                         },
                         InTask::Yes,
                     )
@@ -381,7 +381,7 @@ impl SourceRender for KafkaSourceConnection {
                             "group.id" => format!("{group_id}-metadata"),
                             // Allow Kafka monitoring tools to identify this
                             // consumer.
-                            "client.id" => format!("{client_id}-metadata"),
+                            "client.id" => format!("{client_id}-metadata [{worker}]"),
                         },
                         InTask::Yes,
                     )

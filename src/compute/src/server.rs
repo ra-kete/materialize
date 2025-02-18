@@ -32,7 +32,6 @@ use mz_ore::halt;
 use mz_ore::metrics::MetricsRegistry;
 use mz_ore::tracing::TracingHandle;
 use mz_persist_client::cache::PersistClientCache;
-use mz_service::local::LocalActivator;
 use mz_storage_types::connections::ConnectionContext;
 use mz_txn_wal::operator::TxnsContext;
 use timely::communication::Allocate;
@@ -217,7 +216,6 @@ impl ClusterSpec for Config {
         client_rx: crossbeam_channel::Receiver<(
             crossbeam_channel::Receiver<ComputeCommand>,
             mpsc::UnboundedSender<ComputeResponse>,
-            mpsc::UnboundedSender<LocalActivator>,
         )>,
     ) {
         if self.context.worker_core_affinity {
@@ -717,7 +715,6 @@ fn spawn_channel_adapter(
     client_rx: crossbeam_channel::Receiver<(
         crossbeam_channel::Receiver<ComputeCommand>,
         mpsc::UnboundedSender<ComputeResponse>,
-        mpsc::UnboundedSender<LocalActivator>,
     )>,
     command_tx: command_channel::Sender,
     response_rx: crossbeam_channel::Receiver<(ComputeResponse, ClusterStartupEpoch)>,
@@ -726,18 +723,13 @@ fn spawn_channel_adapter(
     thread::Builder::new()
         .name(format!("compute-channel-adapter-{worker_id}"))
         .spawn(move || {
-            while let Ok((command_rx, response_tx, activator_tx)) = client_rx.recv() {
+            while let Ok((command_rx, response_tx)) = client_rx.recv() {
                 // Serve this connection until we see any of the channels disconnect.
                 //
                 // To make workers aware of the individual client connections, we extract the
                 // client's epoch from the command stream and tag forwarded commands with it.
                 // Additionally, we use the epoch to filter out responses with a different
                 // epoch, which were intended for previous clients.
-
-                let activator = LocalActivator::new(thread::current());
-                if activator_tx.send(activator).is_err() {
-                    continue;
-                }
 
                 // The compute protocol requires that the first command is a `CreateTimely` command
                 // announcing the epoch.
